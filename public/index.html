@@ -164,47 +164,6 @@
     reader.readAsDataURL(file);
   }
 
-  async function llamarGeminiConRetry(apiKey, promptText, intentosMax = 3) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-    
-    for (let i = 1; i <= intentosMax; i++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: promptText },
-                { inlineData: { mimeType: mimeType, data: base64Image } }
-              ]
-            }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          return data.candidates?.[0]?.content?.parts?.[0]?.text;
-        }
-
-        // Si hay error de alta demanda (429/503), esperar 2 segundos y reintentar
-        if (response.status === 429 || response.status === 503 || data.error?.message?.includes('demand')) {
-          if (i < intentosMax) {
-            document.getElementById('output').innerText = `Servidores ocupados. Reintentando automáticamente (${i}/${intentosMax})...`;
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue;
-          }
-        }
-
-        throw new Error(data.error?.message || 'Error en la API');
-      } catch (err) {
-        if (i === intentosMax) throw err;
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-  }
-
   async function procesarOrden() {
     const apiKey = document.getElementById('apiKeyInput').value.trim();
     const outputDiv = document.getElementById('output');
@@ -241,9 +200,32 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
+    // Endpoint oficial estable de Google Gemini para visión
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
     try {
-      const resultado = await llamarGeminiConRetry(apiKey, promptText);
-      outputDiv.innerText = resultado || 'No se pudo leer la información de la imagen.';
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: promptText },
+              { inlineData: { mimeType: mimeType, data: base64Image } }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Error en la API');
+      }
+
+      const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      outputDiv.innerText = resultText || 'No se pudo leer información de la orden.';
+
     } catch (err) {
       outputDiv.className = 'result-box error';
       outputDiv.innerText = '❌ Error: ' + err.message;
