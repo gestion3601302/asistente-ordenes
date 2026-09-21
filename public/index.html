@@ -246,8 +246,9 @@ Si algún dato no figura en la orden o no es legible, indica "No especificado".`
     try {
       const ai = new GoogleGenAI({ apiKey: apiKey });
 
+      // Usamos el modelo estable actual 'gemini-2.5-flash' para sortear restricciones de interceptación
       const response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-2.5-flash',
         contents: [
           {
             role: 'user',
