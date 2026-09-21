@@ -243,36 +243,50 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    try {
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+    const ai = new GoogleGenAI({ apiKey: apiKey });
+    
+    // Lista de modelos a intentar en orden en caso de saturación (503)
+    const listaModelos = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+    let ultimoError = null;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: promptText },
-              {
-                inlineData: {
-                  mimeType: mimeTypeClean,
-                  data: base64ImageClean
+    for (const modeloActual of listaModelos) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modeloActual,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: promptText },
+                {
+                  inlineData: {
+                    mimeType: mimeTypeClean,
+                    data: base64ImageClean
+                  }
                 }
-              }
-            ]
-          }
-        ]
-      });
+              ]
+            }
+          ]
+        });
 
-      outputDiv.innerText = response.text || 'No se pudo extraer información de la imagen.';
-
-    } catch (err) {
-      outputDiv.className = 'result-box error';
-      outputDiv.innerText = '❌ Error: ' + (err.message || 'Error al conectar con la API.');
-    } finally {
-      btn.disabled = false;
-      btn.innerText = 'Interpretar Orden Médica';
+        if (response.text) {
+          outputDiv.innerText = response.text;
+          btn.disabled = false;
+          btn.innerText = 'Interpretar Orden Médica';
+          return;
+        }
+      } catch (err) {
+        ultimoError = err;
+        // Si fue un error de saturación (503) o no disponible, continua con el siguiente modelo de la lista
+        console.warn(`Error con ${modeloActual}:`, err.message);
+      }
     }
+
+    // Si fallan todos los modelos
+    outputDiv.className = 'result-box error';
+    outputDiv.innerText = '❌ Error de disponibilidad: ' + (ultimoError?.message || 'Los servidores están con alta demanda en este momento. Reintenta en unos segundos.');
+    btn.disabled = false;
+    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
