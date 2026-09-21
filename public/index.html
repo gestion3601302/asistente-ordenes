@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asistente de Recepción - Lectura de Órdenes</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f4f8; color: #333; }
+    .container { max-width: 600px; margin: 20px auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    h1 { color: #0056b3; font-size: 24px; text-align: center; margin-top: 0; }
+    p.subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 25px; }
+    
+    .drop-zone { border: 2px dashed #0056b3; border-radius: 8px; padding: 25px; text-align: center; background-color: #f8fbff; cursor: pointer; transition: background 0.2s; }
+    .drop-zone:hover { background-color: #eef5ff; }
+    input[type="file"] { display: none; }
+    
+    .btn-upload { background-color: #0056b3; color: white; padding: 10px 20px; border-radius: 6px; font-weight: bold; display: inline-block; margin-top: 10px; }
+    
+    #preview-container { margin-top: 20px; text-align: center; display: none; }
+    #preview { max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #ddd; }
+    
+    button.btn-submit { width: 100%; padding: 15px; background-color: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; }
+    button.btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
+    button.btn-submit:hover:not(:disabled) { background-color: #218838; }
+    
+    .loader { display: none; text-align: center; margin-top: 20px; color: #0056b3; font-weight: bold; }
+    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #0056b3; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 10px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    #result { margin-top: 25px; padding: 20px; background-color: #f8f9fa; border-left: 4px solid #0056b3; border-radius: 6px; white-space: pre-wrap; font-size: 15px; line-height: 1.6; }
+    .disclaimer { text-align: center; font-size: 12px; color: #888; margin-top: 25px; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Asistente de Recepción</h1>
+    <p class="subtitle">Lectura e interpretación de órdenes médicas con Inteligencia Artificial</p>
+
+    <div class="drop-zone" onclick="document.getElementById('imageFile').click()">
+      <span class="btn-upload">📷 Seleccionar o Tomar Foto</span>
+      <p style="margin: 8px 0 0 0; font-size: 12px; color: #777;">Soporta imágenes JPG, PNG, WEBP</p>
+      <input type="file" id="imageFile" accept="image/*" onchange="handleFileSelect(event)">
+    </div>
+
+    <div id="preview-container">
+      <img id="preview" src="" alt="Vista previa de la orden">
+    </div>
+
+    <button id="btnAnalyze" class="btn-submit" onclick="analizarOrden()" disabled>Interpretar Orden Médica</button>
+
+    <div id="loader" class="loader">
+      <div class="spinner"></div>
+      Procesando orden médica con IA... Por favor aguarde.
+    </div>
+
+    <div id="result">Seleccione una imagen para comenzar.</div>
+
+    <p class="disclaimer">⚠️ Herramienta de asistencia visual. La información debe ser validada por el operador antes de ingresar al sistema.</p>
+  </div>
+
+  <script>
+    let base64Image = "";
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // Reducción y compresión optimizada en el cliente
+          const MAX_SIZE = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+          } else {
+            if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          base64Image = dataUrl.split(',')[1];
+
+          document.getElementById('preview').src = dataUrl;
+          document.getElementById('preview-container').style.display = 'block';
+          document.getElementById('btnAnalyze').disabled = false;
+          document.getElementById('result').innerText = "Imagen cargada correctamente. Presione 'Interpretar Orden Médica'.";
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function analizarOrden() {
+      if (!base64Image) return;
+
+      const btn = document.getElementById('btnAnalyze');
+      const loader = document.getElementById('loader');
+      const resultDiv = document.getElementById('result');
+
+      btn.disabled = true;
+      loader.style.display = 'block';
+      resultDiv.innerText = "";
+
+      try {
+        const response = await fetch('/api/interpretar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Image, mimeType: 'image/jpeg' })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          resultDiv.innerText = data.text;
+        } else {
+          resultDiv.innerText = "⚠️ Error: " + (data.error || "No se pudo procesar.");
+        }
+      } catch (err) {
+        resultDiv.innerText = "❌ Error de conexión con el servidor: " + err.message;
+      } finally {
+        loader.style.display = 'none';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

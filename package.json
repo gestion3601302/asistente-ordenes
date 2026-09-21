@@ -1,0 +1,15 @@
+{
+  "name": "asistente-ordenes-medicas",
+  "version": "1.0.0",
+  "description": "Interpretador de Órdenes Médicas con Gemini IA",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "@google/genai": "^0.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
