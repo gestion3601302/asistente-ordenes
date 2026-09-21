@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Asistente de Recepción - Órdenes Médicas</title>
-  <!-- Cargamos el SDK oficial de Google Gen AI -->
   <script type="importmap">
     {
       "imports": {
@@ -245,11 +244,10 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
     try {
-      // Inicialización mediante el SDK Oficial de Google
       const ai = new GoogleGenAI({ apiKey: apiKey });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [
           {
             role: 'user',
