@@ -126,7 +126,7 @@
   
   <div class="config-box">
     <label for="apiKeyInput">API Key de Gemini:</label>
-    <input type="text" id="apiKeyInput" placeholder="Pega tu API Key de Gemini aquí (ej. AQ...)" />
+    <input type="text" id="apiKeyInput" placeholder="Pega tu API Key de Gemini aquí" />
     <small style="color: #6b778c; font-size: 0.75rem;">Se guardará localmente en tu navegador.</small>
   </div>
 
@@ -243,48 +243,36 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    const ai = new GoogleGenAI({ apiKey: apiKey });
-    
-    // Modelos estables actuales compatibles con las nuevas credenciales
-    const listaModelos = ['gemini-2.5-flash', 'gemini-1.5-flash'];
-    let ultimoError = null;
+    try {
+      const ai = new GoogleGenAI({ apiKey: apiKey });
 
-    for (const modeloActual of listaModelos) {
-      try {
-        const response = await ai.models.generateContent({
-          model: modeloActual,
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: promptText },
-                {
-                  inlineData: {
-                    mimeType: mimeTypeClean,
-                    data: base64ImageClean
-                  }
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: mimeTypeClean,
+                  data: base64ImageClean
                 }
-              ]
-            }
-          ]
-        });
+              }
+            ]
+          }
+        ]
+      });
 
-        if (response.text) {
-          outputDiv.innerText = response.text;
-          btn.disabled = false;
-          btn.innerText = 'Interpretar Orden Médica';
-          return;
-        }
-      } catch (err) {
-        ultimoError = err;
-        console.warn(`Intento fallido con ${modeloActual}:`, err.message);
-      }
+      outputDiv.innerText = response.text || 'No se pudo extraer información de la imagen.';
+
+    } catch (err) {
+      outputDiv.className = 'result-box error';
+      outputDiv.innerText = '❌ Error: ' + (err.message || 'Error al conectar con la API.');
+    } finally {
+      btn.disabled = false;
+      btn.innerText = 'Interpretar Orden Médica';
     }
-
-    outputDiv.className = 'result-box error';
-    outputDiv.innerText = '❌ Error: ' + (ultimoError?.message || 'No se pudo procesar la solicitud.');
-    btn.disabled = false;
-    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
