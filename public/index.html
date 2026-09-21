@@ -120,12 +120,12 @@
   <div class="config-box">
     <label for="apiKeyInput">API Key de Gemini:</label>
     <input type="text" id="apiKeyInput" placeholder="Pega tu API Key de Gemini aquí" />
-    <small style="color: #6b778c; font-size: 0.75rem;">Se guardará localmente en tu navegador para no tener que cargarla de nuevo.</small>
+    <small style="color: #6b778c; font-size: 0.75rem;">Se guardará localmente en tu navegador.</small>
   </div>
 
   <div class="upload-area" onclick="document.getElementById('fileInput').click()">
     <span id="uploadText">📷 Haz clic para seleccionar o tomar foto de la orden</span>
-    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="previewFile()">
+    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="procesarYComprimirImagen()">
     <br>
     <img id="imagePreview" alt="Vista previa de la orden">
   </div>
@@ -143,24 +143,53 @@
     }
   });
 
-  let base64Image = '';
-  let mimeType = '';
+  let base64ImageClean = '';
+  let mimeTypeClean = 'image/jpeg';
 
-  function previewFile() {
+  // Función para comprimir la imagen en el cliente y evitar que la app colapse
+  function procesarYComprimirImagen() {
     const file = document.getElementById('fileInput').files[0];
     if (!file) return;
 
-    mimeType = file.type || 'image/jpeg';
     const reader = new FileReader();
+    reader.onload = function (e) {
+      const img = new Image();
+      img.onload = function () {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
 
-    reader.onloadend = function () {
-      base64Image = reader.result.split(',')[1];
-      const img = document.getElementById('imagePreview');
-      img.src = reader.result;
-      img.style.display = 'block';
-      document.getElementById('uploadText').innerText = 'Cambiar imagen';
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Obtener la imagen comprimida en JPEG al 80% de calidad
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        base64ImageClean = dataUrl.split(',')[1];
+        mimeTypeClean = 'image/jpeg';
+
+        const preview = document.getElementById('imagePreview');
+        preview.src = dataUrl;
+        preview.style.display = 'block';
+        document.getElementById('uploadText').innerText = 'Cambiar imagen';
+      };
+      img.src = e.target.result;
     };
-
     reader.readAsDataURL(file);
   }
 
@@ -174,7 +203,7 @@
       return;
     }
 
-    if (!base64Image) {
+    if (!base64ImageClean) {
       alert('Por favor selecciona o saca una foto de una orden médica.');
       return;
     }
@@ -200,7 +229,6 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    // Endpoint oficial estable de Google Gemini para visión
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     try {
@@ -211,7 +239,7 @@ Si algún dato no figura en la orden o no es legible, indica "No especificado".`
           contents: [{
             parts: [
               { text: promptText },
-              { inlineData: { mimeType: mimeType, data: base64Image } }
+              { inlineData: { mimeType: mimeTypeClean, data: base64ImageClean } }
             ]
           }]
         })
@@ -220,11 +248,11 @@ Si algún dato no figura en la orden o no es legible, indica "No especificado".`
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error?.message || 'Error en la API');
+        throw new Error(data.error?.message || 'Error al procesar la imagen');
       }
 
       const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      outputDiv.innerText = resultText || 'No se pudo leer información de la orden.';
+      outputDiv.innerText = resultText || 'No se pudo extraer el texto de la imagen.';
 
     } catch (err) {
       outputDiv.className = 'result-box error';
