@@ -146,7 +146,6 @@
   let base64ImageClean = '';
   let mimeTypeClean = 'image/jpeg';
 
-  // Función para comprimir la imagen en el cliente y evitar que la app colapse
   function procesarYComprimirImagen() {
     const file = document.getElementById('fileInput').files[0];
     if (!file) return;
@@ -178,7 +177,6 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Obtener la imagen comprimida en JPEG al 80% de calidad
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         base64ImageClean = dataUrl.split(',')[1];
         mimeTypeClean = 'image/jpeg';
@@ -191,6 +189,27 @@
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
+  }
+
+  async function llamarApi(modelo, apiKey, promptText) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: mimeTypeClean, data: base64ImageClean } }
+          ]
+        }]
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || `Error en modelo ${modelo}`);
+    }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text;
   }
 
   async function procesarOrden() {
@@ -229,38 +248,29 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // EL ÚNICO MODELO QUE LA API ACEPTA AHORA
+    const modelosValidos = ['gemini-3.6-flash'];
+    let resultado = null;
+    let ultimoError = null;
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: promptText },
-              { inlineData: { mimeType: mimeTypeClean, data: base64ImageClean } }
-            ]
-          }]
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Error al procesar la imagen');
+    for (const mod of modelosValidos) {
+      try {
+        resultado = await llamarApi(mod, apiKey, promptText);
+        if (resultado) break;
+      } catch (err) {
+        ultimoError = err;
       }
-
-      const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      outputDiv.innerText = resultText || 'No se pudo extraer el texto de la imagen.';
-
-    } catch (err) {
-      outputDiv.className = 'result-box error';
-      outputDiv.innerText = '❌ Error: ' + err.message;
-    } finally {
-      btn.disabled = false;
-      btn.innerText = 'Interpretar Orden Médica';
     }
+
+    if (resultado) {
+      outputDiv.innerText = resultado;
+    } else {
+      outputDiv.className = 'result-box error';
+      outputDiv.innerText = '❌ Error: ' + (ultimoError?.message || 'No se pudo interpretar la imagen.');
+    }
+
+    btn.disabled = false;
+    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
