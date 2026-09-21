@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Asistente de Recepción - Órdenes Médicas</title>
+  <!-- Cargamos el SDK oficial de Google Gen AI -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.run/@google/genai"
+      }
+    }
+  </script>
   <style>
     :root {
       --primary: #00875a;
@@ -123,28 +131,37 @@
     <small style="color: #6b778c; font-size: 0.75rem;">Se guardará localmente en tu navegador.</small>
   </div>
 
-  <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+  <div class="upload-area" id="uploadArea">
     <span id="uploadText">📷 Haz clic para seleccionar o tomar foto de la orden</span>
-    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="procesarYComprimirImagen()">
+    <input type="file" id="fileInput" accept="image/*" style="display: none;">
     <br>
     <img id="imagePreview" alt="Vista previa de la orden">
   </div>
 
-  <button id="btnProcess" onclick="procesarOrden()">Interpretar Orden Médica</button>
+  <button id="btnProcess">Interpretar Orden Médica</button>
 
   <div id="output" style="display: none;" class="result-box"></div>
 </div>
 
-<script>
+<script type="module">
+  import { GoogleGenAI } from '@google/genai';
+
+  let base64ImageClean = '';
+  let mimeTypeClean = 'image/jpeg';
+
   document.addEventListener('DOMContentLoaded', () => {
     const savedKey = localStorage.getItem('gemini_api_key');
     if (savedKey) {
       document.getElementById('apiKeyInput').value = savedKey;
     }
-  });
 
-  let base64ImageClean = '';
-  let mimeTypeClean = 'image/jpeg';
+    document.getElementById('uploadArea').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', procesarYComprimirImagen);
+    document.getElementById('btnProcess').addEventListener('click', procesarOrden);
+  });
 
   function procesarYComprimirImagen() {
     const file = document.getElementById('fileInput').files[0];
@@ -191,27 +208,6 @@
     reader.readAsDataURL(file);
   }
 
-  async function llamarApi(modelo, apiKey, promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType: mimeTypeClean, data: base64ImageClean } }
-          ]
-        }]
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Error en modelo ${modelo}`);
-    }
-    return data.candidates?.[0]?.content?.parts?.[0]?.text;
-  }
-
   async function procesarOrden() {
     const apiKey = document.getElementById('apiKeyInput').value.trim();
     const outputDiv = document.getElementById('output');
@@ -248,29 +244,37 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    // EL ÚNICO MODELO QUE LA API ACEPTA AHORA
-    const modelosValidos = ['gemini-3.6-flash'];
-    let resultado = null;
-    let ultimoError = null;
+    try {
+      // Inicialización mediante el SDK Oficial de Google
+      const ai = new GoogleGenAI({ apiKey: apiKey });
 
-    for (const mod of modelosValidos) {
-      try {
-        resultado = await llamarApi(mod, apiKey, promptText);
-        if (resultado) break;
-      } catch (err) {
-        ultimoError = err;
-      }
-    }
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: mimeTypeClean,
+                  data: base64ImageClean
+                }
+              }
+            ]
+          }
+        ]
+      });
 
-    if (resultado) {
-      outputDiv.innerText = resultado;
-    } else {
+      outputDiv.innerText = response.text || 'No se pudo extraer información de la imagen.';
+
+    } catch (err) {
       outputDiv.className = 'result-box error';
-      outputDiv.innerText = '❌ Error: ' + (ultimoError?.message || 'No se pudo interpretar la imagen.');
+      outputDiv.innerText = '❌ Error: ' + (err.message || 'Error al conectar con la API.');
+    } finally {
+      btn.disabled = false;
+      btn.innerText = 'Interpretar Orden Médica';
     }
-
-    btn.disabled = false;
-    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
