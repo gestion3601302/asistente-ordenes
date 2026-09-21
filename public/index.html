@@ -164,6 +164,27 @@
     reader.readAsDataURL(file);
   }
 
+  async function llamarApiGemini(model, apiKey, promptText) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: mimeType, data: base64Image } }
+          ]
+        }]
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || `Error en modelo ${model}`);
+    }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text;
+  }
+
   async function procesarOrden() {
     const apiKey = document.getElementById('apiKeyInput').value.trim();
     const outputDiv = document.getElementById('output');
@@ -200,43 +221,30 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: promptText },
-              {
-                inlineData: {
-                  mimeType: mimeType,
-                  data: base64Image
-                }
-              }
-            ]
-          }]
-        })
-      });
+    // Intentar primero con gemini-2.5-flash y si falla, pasar a gemini-1.5-flash
+    const modelos = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    let resultado = null;
+    let ultimoError = null;
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Error en la respuesta de Gemini');
+    for (const modelo of modelos) {
+      try {
+        resultado = await llamarApiGemini(modelo, apiKey, promptText);
+        if (resultado) break;
+      } catch (err) {
+        console.warn(`Falló el modelo ${modelo}, reintentando con respaldo...`, err);
+        ultimoError = err;
       }
-
-      const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se pudo obtener el texto de la orden.';
-      outputDiv.innerText = resultText;
-
-    } catch (err) {
-      outputDiv.className = 'result-box error';
-      outputDiv.innerText = '❌ Error: ' + err.message;
-    } finally {
-      btn.disabled = false;
-      btn.innerText = 'Interpretar Orden Médica';
     }
+
+    if (resultado) {
+      outputDiv.innerText = resultado;
+    } else {
+      outputDiv.className = 'result-box error';
+      outputDiv.innerText = '❌ Error: ' + (ultimoError?.message || 'No se pudo procesar la orden en este momento.');
+    }
+
+    btn.disabled = false;
+    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
