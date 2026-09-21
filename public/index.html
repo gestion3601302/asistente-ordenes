@@ -164,25 +164,45 @@
     reader.readAsDataURL(file);
   }
 
-  async function llamarApiGemini(model, apiKey, promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType: mimeType, data: base64Image } }
-          ]
-        }]
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Error en modelo ${model}`);
+  async function llamarGeminiConRetry(apiKey, promptText, intentosMax = 3) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+    
+    for (let i = 1; i <= intentosMax; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: promptText },
+                { inlineData: { mimeType: mimeType, data: base64Image } }
+              ]
+            }]
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          return data.candidates?.[0]?.content?.parts?.[0]?.text;
+        }
+
+        // Si hay error de alta demanda (429/503), esperar 2 segundos y reintentar
+        if (response.status === 429 || response.status === 503 || data.error?.message?.includes('demand')) {
+          if (i < intentosMax) {
+            document.getElementById('output').innerText = `Servidores ocupados. Reintentando automáticamente (${i}/${intentosMax})...`;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+        }
+
+        throw new Error(data.error?.message || 'Error en la API');
+      } catch (err) {
+        if (i === intentosMax) throw err;
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
-    return data.candidates?.[0]?.content?.parts?.[0]?.text;
   }
 
   async function procesarOrden() {
@@ -221,30 +241,16 @@ Analiza detenidamente la imagen de la orden médica adjunta y extrae la informac
 
 Si algún dato no figura en la orden o no es legible, indica "No especificado".`;
 
-    // Lista de modelos oficiales válidos en la API actual
-    const modelos = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-    let resultado = null;
-    let ultimoError = null;
-
-    for (const modelo of modelos) {
-      try {
-        resultado = await llamarApiGemini(modelo, apiKey, promptText);
-        if (resultado) break;
-      } catch (err) {
-        console.warn(`Falló ${modelo}, probando siguiente...`, err);
-        ultimoError = err;
-      }
-    }
-
-    if (resultado) {
-      outputDiv.innerText = resultado;
-    } else {
+    try {
+      const resultado = await llamarGeminiConRetry(apiKey, promptText);
+      outputDiv.innerText = resultado || 'No se pudo leer la información de la imagen.';
+    } catch (err) {
       outputDiv.className = 'result-box error';
-      outputDiv.innerText = '❌ Error: ' + (ultimoError?.message || 'No se pudo procesar la orden.');
+      outputDiv.innerText = '❌ Error: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.innerText = 'Interpretar Orden Médica';
     }
-
-    btn.disabled = false;
-    btn.innerText = 'Interpretar Orden Médica';
   }
 </script>
 
